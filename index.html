@@ -4,37 +4,29 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Weryfikacja listów przewozowych</title>
-
   <style>
     body {
       font-family: Arial, sans-serif;
       margin: 20px;
+      display: none; /* Ukryj do momentu wpisania hasla */
     }
-
-    h1 {
-      margin-bottom: 10px;
-    }
-
     .duplikat-komunikat {
       color: red;
       font-weight: bold;
       font-size: 3em;
       margin-bottom: 10px;
     }
-
     .duplikat-wpis {
       background-color: #ffd6d6;
       border-left: 4px solid red;
       padding-left: 4px;
       font-weight: bold;
     }
-
     #emoji {
       width: 80px;
       display: none;
       margin-bottom: 20px;
     }
-
     #odliczanie {
       font-size: 1.5em;
       font-weight: bold;
@@ -42,13 +34,10 @@
       color: #333;
     }
   </style>
-
-  <!-- Firebase SDK -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js";
-    import { getFirestore, collection, addDoc, getDocs, onSnapshot, query } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js";
+    import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, query, orderBy, onSnapshot } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js";
 
-    // 🔥 Twoja konfiguracja Firebase
     const firebaseConfig = {
       apiKey: "AIzaSyBzFCdVwo6yqBOKgJpzwsAOmcFvDuH6Wik",
       authDomain: "listy-przewozowe.firebaseapp.com",
@@ -59,11 +48,9 @@
       measurementId: "G-V0X4XK47V6"
     };
 
-    // Inicjalizacja Firebase
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // 📦 Główna funkcja zapisu
     async function zapiszDane(event) {
       event.preventDefault();
 
@@ -83,69 +70,102 @@
         return;
       }
 
-      // Sprawdzenie duplikatu w Firestore
       const snapshot = await getDocs(collection(db, "listy"));
-      const istnieje = snapshot.docs.some(
-        doc => doc.data().wpis.toLowerCase() === wpis.toLowerCase()
-      );
+      const istnieje = snapshot.docs.some(doc => doc.data().wpis.toLowerCase() === wpis.toLowerCase());
 
       if (istnieje) {
         komunikat.textContent = "DUPLIKAT!";
         komunikat.classList.add("duplikat-komunikat");
         emoji.style.display = "inline-block";
       } else {
-        // Zapis nowego wpisu do Firestore
         await addDoc(collection(db, "listy"), {
           wpis: wpis,
           czas: new Date().toLocaleString("pl-PL")
         });
       }
 
-      // Skrócone odliczanie 0,5 sekundy
       odliczanie.textContent = "Odświeżanie...";
-      setTimeout(() => {
-        odliczanie.textContent = "";
-      }, 500);
-
+      setTimeout(() => odliczanie.textContent = "", 500);
       tekstInput.value = "";
     }
 
-    // 🔁 Aktualizacja listy w czasie rzeczywistym
     function nasluchujListe() {
       const wynik = document.getElementById("wynik");
-      const q = query(collection(db, "listy"));
+      const q = query(collection(db, "listy"), orderBy("czas"));
 
       onSnapshot(q, (snapshot) => {
         wynik.innerHTML = "";
-        snapshot.docs
-          .map(doc => doc.data())
-          .reverse() // najnowsze na górze
-          .forEach(element => {
-            const p = document.createElement("p");
-            p.textContent = `Wpis: ${element.wpis}, Czas: ${element.czas}`;
-            wynik.appendChild(p);
-          });
+        snapshot.docs.slice().reverse().forEach(doc => {
+          const el = doc.data();
+          const p = document.createElement("p");
+          p.textContent = `Wpis: ${el.wpis}, Czas: ${el.czas}`;
+          wynik.appendChild(p);
+        });
       });
     }
 
+    async function wyczyscStareDane() {
+      const kod = prompt("Podaj kod zabezpieczenia (1231):");
+      if (kod !== "1231") {
+        alert("Błędny kod.");
+        return;
+      }
+
+      const q = query(collection(db, "listy"), orderBy("czas"));
+      const snapshot = await getDocs(q);
+
+      if (snapshot.size <= 1000) {
+        alert("Pozycji mniej niż 1000.");
+        return;
+      }
+
+      const nadmiarowe = snapshot.docs.slice(0, snapshot.size - 1000);
+
+      // Eksportuj do CSV przed usunięciem
+      let csv = "Wpis,Czas\n";
+      nadmiarowe.forEach(doc => {
+        const data = doc.data();
+        csv += `${data.wpis},${data.czas}\n`;
+      });
+
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", "usuniete_wpisy.csv");
+      link.click();
+
+      for (const d of nadmiarowe) {
+        await deleteDoc(doc(db, "listy", d.id));
+      }
+      alert("Usunięto stare dane, zostawiono 1000 najnowszych wpisów.");
+    }
+
     window.zapiszDane = zapiszDane;
-    window.onload = nasluchujListe;
+    window.wyczyscStareDane = wyczyscStareDane;
+    window.onload = () => {
+      const haslo = prompt("Podaj hasło dostępu:");
+      if (haslo === "MagazynARD") {
+        document.body.style.display = "block";
+        nasluchujListe();
+      } else {
+        document.write("<h2>Brak dostępu</h2>");
+      }
+    }
   </script>
 </head>
-
 <body>
   <h1>Weryfikacja listów przewozowych</h1>
-
   <form onsubmit="zapiszDane(event)">
     <label for="tekst">Numer listu przewozowego (max 50 znaków):</label>
-    <input type="text" id="tekst" name="tekst" maxlength="50" required />
+    <input type="text" id="tekst" maxlength="50" required />
     <button type="submit">Zapisz</button>
   </form>
-
   <div id="komunikat"></div>
   <img id="emoji" src="https://em-content.zobj.net/thumbs/240/apple/354/anguished-face_1f627.png" alt="Zaniepokojona buźka" />
   <div id="odliczanie"></div>
-
+  <br/>
+  <button onclick="wyczyscStareDane()">🧹 Wyczyść bazę (zostaw 1000 najnowszych + eksport)</button>
   <div id="wynik"></div>
 </body>
 </html>
