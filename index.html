@@ -8,7 +8,7 @@
     body {
       font-family: Arial, sans-serif;
       margin: 20px;
-      display: none; /* Ukryj do momentu wpisania hasla */
+      display: none;
     }
     .duplikat-komunikat {
       color: red;
@@ -21,6 +21,7 @@
       border-left: 4px solid red;
       padding-left: 4px;
       font-weight: bold;
+      color: red;
     }
     #emoji {
       width: 80px;
@@ -77,10 +78,17 @@
         komunikat.textContent = "DUPLIKAT!";
         komunikat.classList.add("duplikat-komunikat");
         emoji.style.display = "inline-block";
+
+        await addDoc(collection(db, "listy"), {
+          wpis: wpis + " (duplikat)",
+          czas: new Date().toLocaleString("pl-PL"),
+          duplikat: true
+        });
       } else {
         await addDoc(collection(db, "listy"), {
           wpis: wpis,
-          czas: new Date().toLocaleString("pl-PL")
+          czas: new Date().toLocaleString("pl-PL"),
+          duplikat: false
         });
       }
 
@@ -99,6 +107,9 @@
           const el = doc.data();
           const p = document.createElement("p");
           p.textContent = `Wpis: ${el.wpis}, Czas: ${el.czas}`;
+          if (el.duplikat) {
+            p.classList.add("duplikat-wpis");
+          }
           wynik.appendChild(p);
         });
       });
@@ -121,7 +132,6 @@
 
       const nadmiarowe = snapshot.docs.slice(0, snapshot.size - 1000);
 
-      // Eksportuj do CSV przed usunięciem
       let csv = "Wpis,Czas\n";
       nadmiarowe.forEach(doc => {
         const data = doc.data();
