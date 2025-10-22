@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Weryfikacja listów przewozowych</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+
+    h1 {
+      margin-bottom: 10px;
+    }
+
+    .duplikat-komunikat {
+      color: red;
+      font-weight: bold;
+      font-size: 3em;
+      margin-bottom: 10px;
+    }
+
+    .duplikat-wpis {
+      background-color: #ffd6d6;
+      border-left: 4px solid red;
+      padding-left: 4px;
+      font-weight: bold;
+    }
+
+    #emoji {
+      width: 80px;
+      display: none;
+      margin-bottom: 20px;
+    }
+
+    #odliczanie {
+      font-size: 1.5em;
+      font-weight: bold;
+      margin-top: 10px;
+      color: #333;
+    }
+  </style>
+
+  <!-- Firebase SDK -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js";
+    import { getFirestore, collection, addDoc, getDocs, onSnapshot, query } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js";
+
+    // 🔥 Twoja konfiguracja Firebase
+    const firebaseConfig = {
+      apiKey: "AIzaSyBzFCdVwo6yqBOKgJpzwsAOmcFvDuH6Wik",
+      authDomain: "listy-przewozowe.firebaseapp.com",
+      projectId: "listy-przewozowe",
+      storageBucket: "listy-przewozowe.firebasestorage.app",
+      messagingSenderId: "82668165739",
+      appId: "1:82668165739:web:16ea9db3946b3c694def2e",
+      measurementId: "G-V0X4XK47V6"
+    };
+
+    // Inicjalizacja Firebase
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // 📦 Główna funkcja zapisu
+    async function zapiszDane(event) {
+      event.preventDefault();
+
+      const tekstInput = document.getElementById("tekst");
+      const wpis = tekstInput.value.trim();
+      const komunikat = document.getElementById("komunikat");
+      const emoji = document.getElementById("emoji");
+      const odliczanie = document.getElementById("odliczanie");
+
+      komunikat.textContent = "";
+      komunikat.classList.remove("duplikat-komunikat");
+      emoji.style.display = "none";
+      odliczanie.textContent = "";
+
+      if (wpis.length === 0 || wpis.length > 50) {
+        alert("Proszę wpisać numer listu przewozowego (1–50 znaków).");
+        return;
+      }
+
+      // Sprawdzenie duplikatu w Firestore
+      const snapshot = await getDocs(collection(db, "listy"));
+      const istnieje = snapshot.docs.some(
+        doc => doc.data().wpis.toLowerCase() === wpis.toLowerCase()
+      );
+
+      if (istnieje) {
+        komunikat.textContent = "DUPLIKAT!";
+        komunikat.classList.add("duplikat-komunikat");
+        emoji.style.display = "inline-block";
+      } else {
+        // Zapis nowego wpisu do Firestore
+        await addDoc(collection(db, "listy"), {
+          wpis: wpis,
+          czas: new Date().toLocaleString("pl-PL")
+        });
+      }
+
+      // Skrócone odliczanie 0,5 sekundy
+      odliczanie.textContent = "Odświeżanie...";
+      setTimeout(() => {
+        odliczanie.textContent = "";
+      }, 500);
+
+      tekstInput.value = "";
+    }
+
+    // 🔁 Aktualizacja listy w czasie rzeczywistym
+    function nasluchujListe() {
+      const wynik = document.getElementById("wynik");
+      const q = query(collection(db, "listy"));
+
+      onSnapshot(q, (snapshot) => {
+        wynik.innerHTML = "";
+        snapshot.docs
+          .map(doc => doc.data())
+          .reverse() // najnowsze na górze
+          .forEach(element => {
+            const p = document.createElement("p");
+            p.textContent = `Wpis: ${element.wpis}, Czas: ${element.czas}`;
+            wynik.appendChild(p);
+          });
+      });
+    }
+
+    window.zapiszDane = zapiszDane;
+    window.onload = nasluchujListe;
+  </script>
+</head>
+
+<body>
+  <h1>Weryfikacja listów przewozowych</h1>
+
+  <form onsubmit="zapiszDane(event)">
+    <label for="tekst">Numer listu przewozowego (max 50 znaków):</label>
+    <input type="text" id="tekst" name="tekst" maxlength="50" required />
+    <button type="submit">Zapisz</button>
+  </form>
+
+  <div id="komunikat"></div>
+  <img id="emoji" src="https://em-content.zobj.net/thumbs/240/apple/354/anguished-face_1f627.png" alt="Zaniepokojona buźka" />
+  <div id="odliczanie"></div>
+
+  <div id="wynik"></div>
+</body>
+</html>
